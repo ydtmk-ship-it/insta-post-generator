@@ -93,49 +93,39 @@ async def generate(
     space: str = Form(""),
     tone: str = Form(""),
 ):
-    # 画像を base64 に
-    img_bytes = await image.read()
-    b64 = base64.b64encode(img_bytes).decode("utf-8")
+    try:
+        # 画像は読み込むが、AIは呼ばない（診断用）
+        img_bytes = await image.read()
+        b64 = base64.b64encode(img_bytes).decode("utf-8")
 
-    # 3案生成
-    post_a = generate_one(b64, space, tone, "A")
-    post_b = generate_one(b64, space, tone, "B")
-    post_c = generate_one(b64, space, tone, "C")
+        payload = {
+            "filename": image.filename,
+            "space": space,
+            "tone": tone,
+            "image_base64": b64,
+            "post_a": "DIAG A",
+            "post_b": "DIAG B",
+            "post_c": "DIAG C",
+            "status": "DIAG"
+        }
 
-    # Apps Script へ送信
-    payload = {
-        "filename": image.filename,
-        "space": space,
-        "tone": tone,
-        "image_base64": b64,
-        "post_a": post_a,
-        "post_b": post_b,
-        "post_c": post_c,
-        "status": "未確認"
-    }
-
-    r = requests.post(WEBHOOK_URL, json=payload, timeout=60)
-    apps_script_reply = r.text[:300]
-    r.raise_for_status()
-
-    # 画面表示
-    return f"""
-    <html>
-      <body>
-        <h3>✅ スプレッドシートに追加しました</h3>
+        r = requests.post(WEBHOOK_URL, json=payload, timeout=60)
+        return f"""
+        <html><body>
+        <h3>DIAG</h3>
         <p><b>WEBHOOK_URL:</b> {WEBHOOK_URL}</p>
-        <p><b>Apps Script reply:</b> {apps_script_reply}</p>
-
-        <h4>A案</h4>
-        <pre style="white-space:pre-wrap;">{post_a}</pre>
-
-        <h4>B案</h4>
-        <pre style="white-space:pre-wrap;">{post_b}</pre>
-
-        <h4>C案</h4>
-        <pre style="white-space:pre-wrap;">{post_c}</pre>
-
+        <p><b>Status:</b> {r.status_code}</p>
+        <pre>{r.text[:1000]}</pre>
+        <p>Size(bytes): {len(img_bytes)}</p>
         <p><a href="/">戻る</a></p>
-      </body>
-    </html>
-    """
+        </body></html>
+        """
+    except Exception as e:
+        return f"""
+        <html><body>
+        <h3>ERROR</h3>
+        <p>{str(e)}</p>
+        <p><b>WEBHOOK_URL:</b> {WEBHOOK_URL}</p>
+        <p><a href="/">戻る</a></p>
+        </body></html>
+        """
