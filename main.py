@@ -7,7 +7,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyQ3k9MTZfUEoMv1JnoLM7pI-EcYLgKwKKg-NOPRL0JdkwnQers9ic_loHjX2YW6l35/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyhn8ocRNYNwitowJeDTfeez6V2rk1ZfVFQLqs5vfDoAzXML63tZysSg8LCtoazXwtu/exec"
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 MODEL = "gpt-4.1-mini"
