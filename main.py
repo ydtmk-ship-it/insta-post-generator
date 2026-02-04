@@ -7,7 +7,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxEPEBeRh_FeJzgEO5KCdpZfa-FQz8Pq6BZll_lVRsNEE3eoZTuphRMgod-rnZgwuQL/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyQ3k9MTZfUEoMv1JnoLM7pI-EcYLgKwKKg-NOPRL0JdkwnQers9ic_loHjX2YW6l35/exec"
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 MODEL = "gpt-4.1-mini"
@@ -99,6 +99,7 @@ async def generate(
         "filename": image.filename,
         "space": space,
         "tone": tone,
+        "image_base64": b64, 
         "post_a": post_a,
         "post_b": post_b,
         "post_c": post_c,
