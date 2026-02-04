@@ -8,7 +8,7 @@ from openai import OpenAI
 app = FastAPI()
 
 # ★ Apps Script Webhook（Driveを使わない版）
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyEDXaZvoB4kN9LMyhLjAuSD1tTn3cwZu13Qs3AEW9L4J0vBb9no7sQyX1tcC7U8O3e/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwAPEeNAEptPF5agEn80eRm2JnIjGSOHo1EfkDiSUZ4azHzGq-ScWEoF1dhiv0ecevq/exec"
 
 # OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
