@@ -1,21 +1,20 @@
 import base64
-import io
 import os
 import requests
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from openai import OpenAI
-from PIL import Image  # ★ 追加（requirements.txt に pillow が必要）
 
 app = FastAPI()
 
-# ★ あなたの最新 Apps Script Webhook URL
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbys5XkMqr437ymQDoV_JB0Ij8oTnjqVWa2xzDBLs4DGRHCZSwDKjjEj1bA2ipe_Rzfx/exec"
+# ★ Apps Script Webhook（Driveを使わない版）
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyEDXaZvoB4kN9LMyhLjAuSD1tTn3cwZu13Qs3AEW9L4J0vBb9no7sQyX1tcC7U8O3e/exec"
 
 # OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 MODEL = "gpt-4.1-mini"
 
+# ---------- 画面 ----------
 FORM_HTML = """
 <html>
   <body>
@@ -24,24 +23,13 @@ FORM_HTML = """
       <p>施工例画像：<input type="file" name="image" accept="image/*" required></p>
       <p>空間タイプ：<input type="text" name="space" placeholder="例：LDK、洗面"></p>
       <p>トーン：<input type="text" name="tone" placeholder="例：やさしい、上品"></p>
-      <button type="submit">生成してスプレッドシートへ</button>
+      <button type="submit">生成する</button>
     </form>
   </body>
 </html>
 """
 
-def compress_image_bytes(img_bytes: bytes, max_side: int = 1280, quality: int = 72) -> bytes:
-    """
-    Apps Script 側へ base64 で送る前に、画像を軽くしてサイズ制限に引っかかりにくくする。
-    - max_side: 長辺の最大ピクセル
-    - quality: JPEG品質（低いほど軽い）
-    """
-    im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-    im.thumbnail((max_side, max_side))
-    out = io.BytesIO()
-    im.save(out, format="JPEG", quality=quality, optimize=True)
-    return out.getvalue()
-
+# ---------- プロンプト ----------
 def build_prompt(space: str, tone: str, variant: str) -> str:
     style_map = {
         "A": "暮らしの情景重視（朝・夜・家族の動き）",
@@ -58,12 +46,12 @@ def build_prompt(space: str, tone: str, variant: str) -> str:
 
 【文章ルール】
 ・やさしく上品、暮らしが想像できる文体
-・営業感、誇張表現は禁止（最安/No.1/絶対 など）
+・営業感、誇張表現は禁止
 ・冒頭は必ず「. . 𖥧 𖥧 .」
 ・本文は4〜6行、改行を保持
 ・絵文字は使わない
 
-【指定（あれば反映）】
+【指定】
 空間タイプ：{space}
 トーン：{tone}
 
@@ -80,21 +68,21 @@ def build_prompt(space: str, tone: str, variant: str) -> str:
 -----------------------
 """.strip()
 
-def generate_one(b64_for_vision: str, space: str, tone: str, variant: str) -> str:
+def generate_one(b64: str, space: str, tone: str, variant: str) -> str:
     prompt = build_prompt(space, tone, variant)
-
     resp = client.responses.create(
         model=MODEL,
         input=[{
             "role": "user",
             "content": [
                 {"type": "input_text", "text": prompt},
-                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{b64_for_vision}"}
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{b64}"}
             ]
         }]
     )
     return resp.output_text.strip()
 
+# ---------- ルーティング ----------
 @app.get("/", response_class=HTMLResponse)
 def index():
     return FORM_HTML
@@ -105,70 +93,44 @@ async def generate(
     space: str = Form(""),
     tone: str = Form(""),
 ):
-    try:
-        # 1) 画像読み込み
-        raw_bytes = await image.read()
+    # 画像を base64 に（OpenAI用のみ。Apps Scriptには送らない）
+    img_bytes = await image.read()
+    b64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        # 2) Apps Script用に圧縮（軽量化）
-        compressed_bytes = compress_image_bytes(raw_bytes, max_side=1280, quality=72)
+    # 3案生成
+    post_a = generate_one(b64, space, tone, "A")
+    post_b = generate_one(b64, space, tone, "B")
+    post_c = generate_one(b64, space, tone, "C")
 
-        # 3) OpenAI Visionへ渡すbase64（圧縮後を使う：安定＆速い）
-        b64 = base64.b64encode(compressed_bytes).decode("utf-8")
+    # Apps Scriptへ送信（画像なし）
+    payload = {
+        "filename": image.filename,
+        "space": space,
+        "tone": tone,
+        "post_a": post_a,
+        "post_b": post_b,
+        "post_c": post_c,
+        "status": "未確認"
+    }
 
-        # 4) 3案生成
-        post_a = generate_one(b64, space, tone, "A")
-        post_b = generate_one(b64, space, tone, "B")
-        post_c = generate_one(b64, space, tone, "C")
+    requests.post(WEBHOOK_URL, json=payload, timeout=60)
 
-        # 5) Apps Scriptへ送信（画像も送る）
-        payload = {
-            "filename": image.filename,
-            "space": space,
-            "tone": tone,
-            "image_base64": b64,  # ★ 圧縮後base64
-            "post_a": post_a,
-            "post_b": post_b,
-            "post_c": post_c,
-            "status": "未確認"
-        }
+    # 成功画面（デバッグ情報なし）
+    return f"""
+    <html>
+      <body>
+        <h3>✅ 3案を作成しました</h3>
 
-        r = requests.post(WEBHOOK_URL, json=payload, timeout=90)
-        apps_script_reply = (r.text or "")[:600]
-        r.raise_for_status()
+        <h4>A案</h4>
+        <pre style="white-space:pre-wrap;">{post_a}</pre>
 
-        return f"""
-        <html>
-          <body>
-            <h3>✅ スプレッドシートに追加しました</h3>
+        <h4>B案</h4>
+        <pre style="white-space:pre-wrap;">{post_b}</pre>
 
-            <p><b>WEBHOOK_URL:</b> {WEBHOOK_URL}</p>
-            <p><b>Apps Script reply:</b> <pre>{apps_script_reply}</pre></p>
+        <h4>C案</h4>
+        <pre style="white-space:pre-wrap;">{post_c}</pre>
 
-            <p><b>raw bytes:</b> {len(raw_bytes)}</p>
-            <p><b>compressed bytes:</b> {len(compressed_bytes)}</p>
-            <p><b>base64 chars:</b> {len(b64)}</p>
-
-            <h4>A案</h4>
-            <pre style="white-space:pre-wrap;">{post_a}</pre>
-
-            <h4>B案</h4>
-            <pre style="white-space:pre-wrap;">{post_b}</pre>
-
-            <h4>C案</h4>
-            <pre style="white-space:pre-wrap;">{post_c}</pre>
-
-            <p><a href="/">戻る</a></p>
-          </body>
-        </html>
-        """
-    except Exception as e:
-        return f"""
-        <html>
-          <body>
-            <h3>❌ ERROR</h3>
-            <p>{str(e)}</p>
-            <p><b>WEBHOOK_URL:</b> {WEBHOOK_URL}</p>
-            <p><a href="/">戻る</a></p>
-          </body>
-        </html>
-        """
+        <p><a href="/">戻る</a></p>
+      </body>
+    </html>
+    """
