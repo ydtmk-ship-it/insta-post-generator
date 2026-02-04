@@ -10,7 +10,7 @@ from PIL import Image  # ★ 追加（requirements.txt に pillow が必要）
 app = FastAPI()
 
 # ★ あなたの最新 Apps Script Webhook URL
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbymDibHO5tAc0fM0iUUQz6N7nRz6qYS7iA_O39g7lTPFYXCvquaQ0uim41TYhoIuNQ/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbys5XkMqr437ymQDoV_JB0Ij8oTnjqVWa2xzDBLs4DGRHCZSwDKjjEj1bA2ipe_Rzfx/exec"
 
 # OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
